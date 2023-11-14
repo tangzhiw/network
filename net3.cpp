@@ -77,13 +77,13 @@ void ARP_show(struct pcap_pkthdr* header, const u_char* pkt_data)
 {
     struct ARPFrame_t* arp;
     arp = (struct ARPFrame_t*)(pkt_data);
-    in_addr source,aim;
+    in_addr source, aim;
     memcpy(&source, &arp->SendIP, sizeof(in_addr));
     memcpy(&aim, &arp->RecvIP, sizeof(in_addr));
     cout << "源MAC地址：  " << *(Byte2Hex(arp->FrameHeader.SrcMAC, 6)) << endl;
     cout << "源IP地址：   " << inet_ntoa(source) << endl;
     cout << "目的MAC地址：" << *(Byte2Hex(arp->FrameHeader.DesMAC, 6)) << endl;
-    cout << "目的IP地址  " << inet_ntoa(aim)<< endl;
+    cout << "目的IP地址  " << inet_ntoa(aim) << endl;
     cout << endl;
 }
 
@@ -136,13 +136,17 @@ pcap_if_t* getInterfaceList() {
     return alldevs;
 }
 
-void SET_ARP_HOST(ARPFrame_t& ARPFrame1, char ip[INET_ADDRSTRLEN]) {
+void initializeMACAddress(unsigned char* address, unsigned char value) {
     for (int i = 0; i < 6; i++) {
-        ARPFrame1.FrameHeader.DesMAC[i] = 0xff;
-        ARPFrame1.FrameHeader.SrcMAC[i] = 0x0f;
-        ARPFrame1.SendHa[i] = 0x1f;
-        ARPFrame1.RecvHa[i] = 0x00;
+        address[i] = value;
     }
+}
+
+void SET_ARP_HOST(ARPFrame_t& ARPFrame1, const char* ip) {
+    initializeMACAddress(ARPFrame1.FrameHeader.DesMAC, 0xff);
+    initializeMACAddress(ARPFrame1.FrameHeader.SrcMAC, 0x1f);
+    initializeMACAddress(ARPFrame1.SendHa, 0x1f);
+    initializeMACAddress(ARPFrame1.RecvHa, 0x00);
 
     ARPFrame1.FrameHeader.FrameType = htons(0x0806);
     ARPFrame1.HardwareType = htons(0x0001);
@@ -153,13 +157,13 @@ void SET_ARP_HOST(ARPFrame_t& ARPFrame1, char ip[INET_ADDRSTRLEN]) {
     ARPFrame1.SendIP = inet_addr("192.168.120.110");
     ARPFrame1.RecvIP = inet_addr(ip);
 }
-void SET_ARP_DEST(ARPFrame_t& ARPFrame, char ip[INET_ADDRSTRLEN], unsigned char* mac, unsigned char* desmac) {
-    for (int i = 0; i < 6; i++) {
-        ARPFrame.FrameHeader.DesMAC[i] = 0xff;
-        ARPFrame.RecvHa[i] = 0x00;
-        ARPFrame.FrameHeader.SrcMAC[i] = mac[i];//设置为本机网卡的MAC地址
-        ARPFrame.SendHa[i] = mac[i];//设置为本机网卡的MAC地址
-    }
+
+void SET_ARP_DEST(ARPFrame_t& ARPFrame, const char* ip, const unsigned char* mac) {
+    initializeMACAddress(ARPFrame.FrameHeader.DesMAC, 0xff);
+    initializeMACAddress(ARPFrame.RecvHa, 0x00);
+    memcpy(ARPFrame.FrameHeader.SrcMAC, mac, 6); // Set to the local network card's MAC address
+    memcpy(ARPFrame.SendHa, mac, 6); // Set to the local network card's MAC address
+
     ARPFrame.FrameHeader.FrameType = htons(0x0806);
     ARPFrame.HardwareType = htons(0x0001);
     ARPFrame.ProtocolType = htons(0x0800);
@@ -167,22 +171,22 @@ void SET_ARP_DEST(ARPFrame_t& ARPFrame, char ip[INET_ADDRSTRLEN], unsigned char*
     ARPFrame.PLen = 4;
     ARPFrame.Operation = htons(0x0001);
     ARPFrame.SendIP = inet_addr(ip);
-
 }
+
 
 
 int main() {
 
-    pcap_if_t* alldevs= getInterfaceList();//指向设备链表首部的指针
+    pcap_if_t* alldevs = getInterfaceList();//指向设备链表首部的指针
     pcap_if_t* d;
     pcap_addr_t* a;
     if (alldevs != NULL) {
-        
+
         printInterfaceList(alldevs);
     }
     char errbuf[PCAP_ERRBUF_SIZE];//错误信息缓冲区
-    
-    cout << endl<<endl;
+
+    cout << endl << endl;
 
     //设备链表首部的指针
     d = alldevs;
@@ -202,7 +206,7 @@ int main() {
     //打开用户选择设备的网卡
     pcap_t* dev = pcap_open(d->name, 100, PCAP_OPENFLAG_PROMISCUOUS, 1000, NULL, errbuf);
 
-    
+
     //保存网卡的ip地址（指向缓冲区的指针，用于存储 IP 地址的 NULL 终止字符串表示形式。）
     char ip[INET_ADDRSTRLEN];
 
@@ -230,14 +234,14 @@ int main() {
     //pcap_next_ex()捕获数据包
     while ((k = pcap_next_ex(dev, &pkt_header, &pkt_data)) >= 0) {
         //发送数据包
-       
+
         pcap_sendpacket(dev, (u_char*)&ARPF_Send, sizeof(ARPFrame_t));
         struct ARPFrame_t* arp_message;
         arp_message = (struct ARPFrame_t*)(pkt_data);
         if (k == 1)
-        
+
         {   //帧类型为ARP，且操作类型为ARP响应，SendIp为发送的数据包中的RecvIP
-            
+
             if (arp_message->FrameHeader.FrameType == htons(0x0806) && arp_message->Operation == htons(0x0002)) {
                 cout << "ARP数据包：\n";
                 ARP_show(header, pkt_data);//打印相应的信息
@@ -256,7 +260,7 @@ int main() {
 
     //设置ARP帧
 
-    SET_ARP_DEST(ARPFrame, ip, mac, desmac);
+    SET_ARP_DEST(ARPFrame, ip, mac);
 
     cout << "请输入目的主机的IP地址：";
     char desip[INET_ADDRSTRLEN];
@@ -264,13 +268,13 @@ int main() {
     ARPFrame.RecvIP = inet_addr(desip); //设置为请求的IP地址
 
     while ((k = pcap_next_ex(dev, &pkt_header, &pkt_data)) >= 0) {
-        
+
         pcap_sendpacket(dev, (u_char*)&ARPFrame, sizeof(ARPFrame_t));
         struct ARPFrame_t* arp_message;
         arp_message = (struct ARPFrame_t*)(pkt_data);
         if (k == 0)continue;
         else
-            
+
             if (arp_message->FrameHeader.FrameType == htons(0x0806) && arp_message->Operation == htons(0x0002) && *(unsigned long*)(pkt_data + 28) == ARPFrame.RecvIP) {
                 cout << "ARP数据包：\n";
                 ARP_show(header, pkt_data);
@@ -282,8 +286,3 @@ int main() {
     pcap_freealldevs(alldevs);
     system("pause");
 }
-
-
-
-
-
