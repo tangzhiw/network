@@ -78,7 +78,7 @@ void ARP_show(struct pcap_pkthdr* header, const u_char* pkt_data)
     struct ARPFrame_t* arp;
     arp = (struct ARPFrame_t*)(pkt_data);
     in_addr source, aim;
-    memcpy(&source, &arp->SendIP, sizeof(in_addr));
+    memcpy(&source, &arp->SendIP,4);
     memcpy(&aim, &arp->RecvIP, sizeof(in_addr));
     cout << "源MAC地址：  " << *(Byte2Hex(arp->FrameHeader.SrcMAC, 6)) << endl;
     cout << "源IP地址：   " << inet_ntoa(source) << endl;
@@ -143,7 +143,7 @@ void initializeMACAddress(unsigned char* address, unsigned char value) {
 }
 
 void SET_ARP_HOST(ARPFrame_t& ARPFrame1, const char* ip) {
-    initializeMACAddress(ARPFrame1.FrameHeader.DesMAC, 0xff);
+    initializeMACAddress(ARPFrame1.FrameHeader.DesMAC, 0x00);
     initializeMACAddress(ARPFrame1.FrameHeader.SrcMAC, 0x1f);
     initializeMACAddress(ARPFrame1.SendHa, 0x1f);
     initializeMACAddress(ARPFrame1.RecvHa, 0x00);
@@ -240,12 +240,11 @@ int main() {
         arp_message = (struct ARPFrame_t*)(pkt_data);
         if (k == 1)
 
-        {   //帧类型为ARP，且操作类型为ARP响应，SendIp为发送的数据包中的RecvIP
+        {   
 
             if (arp_message->FrameHeader.FrameType == htons(0x0806) && arp_message->Operation == htons(0x0002)) {
                 cout << "ARP数据包：\n";
                 ARP_show(header, pkt_data);//打印相应的信息
-                //用MAC地址记录本机的MAC地址，用于后续构造ARP数据包
                 memcpy(mac, &(pkt_data[22]), 6);
                 cout << "本机MAC：" << *(Byte2Hex(mac, 6)) << endl;
                 break;
@@ -275,7 +274,9 @@ int main() {
         if (k == 0)continue;
         else
 
-            if (arp_message->FrameHeader.FrameType == htons(0x0806) && arp_message->Operation == htons(0x0002) && *(unsigned long*)(pkt_data + 28) == ARPFrame.RecvIP) {
+            if (arp_message->FrameHeader.FrameType == htons(0x0806) 
+                && arp_message->Operation == htons(0x0002) 
+                && *(unsigned long*)(pkt_data + 28) == ARPFrame.RecvIP) {
                 cout << "ARP数据包：\n";
                 ARP_show(header, pkt_data);
                 memcpy(desmac, &(pkt_data[22]), 6);
